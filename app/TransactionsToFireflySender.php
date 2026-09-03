@@ -113,14 +113,15 @@ class TransactionsToFireflySender
         $rawDescription = $description;
 
         if (!empty($regex_match) && !empty($regex_replace) && !empty($description)) {
-            $result = preg_replace($regex_match, $regex_replace, $description);
-            if ($result !== null) {
-                $description = $result;
+            try {
+                $result = preg_replace($regex_match, $regex_replace, $description);
+            } catch (\Throwable $e) {
+                $result = null;
             }
-        }
-
-        if($description == null) {
-            throw new \Exception("Error in regular expression!\nMatch expression {$regex_match}\nReplace expression {$regex_replace}");
+            if ($result === null || preg_last_error() !== PREG_NO_ERROR) {
+                throw new \Exception("Error in regular expression!\nMatch expression {$regex_match}\nReplace expression {$regex_replace}");
+            }
+            $description = $result;
         }
 
         if (
