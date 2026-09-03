@@ -285,6 +285,7 @@ final class TransactionsToFireflySenderTest extends TestCase
     {
         $description = 'KARTENVERFÜGUNGLIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NLKARTE NR. 4871 78XX XXXX 0469KARTENZAHLUNGCOMDIRECT VISA-DEBITKARTE2026-08-27 00:00:00Ref. 2M2C29CV1IKW4XFE/95664';
         $transaction = new Transaction;
+        $transaction->setAccountNumber('');
         $transaction->setCreditDebit(Transaction::CD_DEBIT);
         $transaction->setValutaDate(new DateTime('2026-08-27'));
         $transaction->setAmount(42.50);
@@ -321,6 +322,7 @@ final class TransactionsToFireflySenderTest extends TestCase
         $regex_replace = '$2 [$1 | $3$4]';
 
         $transaction = new Transaction;
+        $transaction->setAccountNumber('');
         $transaction->setCreditDebit(Transaction::CD_DEBIT);
         $transaction->setValutaDate(new DateTime('2026-08-27'));
         $transaction->setAmount(42.50);
