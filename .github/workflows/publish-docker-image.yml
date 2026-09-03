@@ -9,40 +9,64 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
     steps:
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Get current date
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current date
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-      -
-        name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/386
+          context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            benkl/firefly-iii-fints-importer:latest
-            benkl/firefly-iii-fints-importer:${{ steps.date.outputs.date }}
-          
-      - uses: actions/checkout@v3
-      - run: "sed -i 's/build: ./image: benkl\\/firefly-iii-fints-importer/g' docker-compose.yml"
-      - name: Start image
+            ghcr.io/${{ github.repository_owner }}/firefly-iii-fints-importer:latest
+            ghcr.io/${{ github.repository_owner }}/firefly-iii-fints-importer:${{ steps.date.outputs.date }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build test image
+        run: docker compose build
+
+      - name: Start container
         run: docker compose up -d
-      - run: docker compose ps | grep -q app
-      - run: curl localhost:8080
-      - run: docker compose exec -T app composer install --dev
-      - name: Run Tests
+
+      - name: Wait for container
+        run: sleep 5
+
+      - name: Check container running
+        run: docker compose ps | grep -q app
+
+      - name: Check HTTP response
+        run: curl -sf localhost:8080
+
+      - name: Install dev dependencies
+        run: docker compose exec -T app composer install --dev
+
+      - name: Run PHPUnit tests
         run: docker compose exec -T app ./vendor/bin/phpunit tests
