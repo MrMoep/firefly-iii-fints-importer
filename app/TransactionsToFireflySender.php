@@ -46,6 +46,20 @@ class TransactionsToFireflySender
         }
     }
 
+    /**
+     * Comdirect card withdrawals (KARTENVERFÜGUNG) omit counterparty data.
+     * Extract the merchant name from the booking text when no name is available.
+     */
+    public static function extractCardMerchantName(string $description): ?string
+    {
+        if (preg_match('/^KARTENVERFÜGUNG\s*(.+?)\s*KARTE\s+NR\./iu', $description, $matches) !== 1) {
+            return null;
+        }
+
+        $merchant = trim($matches[1]);
+        return $merchant !== '' ? $merchant : null;
+    }
+
     public static function transform_transaction_to_firefly_request_body(
         Transaction $transaction,
         int $firefly_account_id,
@@ -96,6 +110,8 @@ class TransactionsToFireflySender
             $description = $transaction->getDescription1();
         }
 
+        $rawDescription = $description;
+
         if (!empty($regex_match) && !empty($regex_replace) && !empty($description)) {
             $result = preg_replace($regex_match, $regex_replace, $description);
             if ($result !== null) {
@@ -105,6 +121,17 @@ class TransactionsToFireflySender
 
         if($description == null) {
             throw new \Exception("Error in regular expression!\nMatch expression {$regex_match}\nReplace expression {$regex_replace}");
+        }
+
+        if (
+            $type === TransactionType::WITHDRAWAL
+            && empty($destination['name'])
+            && $rawDescription !== ''
+        ) {
+            $merchantName = self::extractCardMerchantName($rawDescription);
+            if ($merchantName !== null) {
+                $destination['name'] = $merchantName;
+            }
         }
 
         // Get currency code from structured description (set by CAMT parser)
