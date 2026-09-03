@@ -269,4 +269,105 @@ final class TransactionsToFireflySenderTest extends TestCase
         restore_error_handler();
     }
 
+    public function test_extract_card_merchant_name()
+    {
+        $description = 'KARTENVERFÜGUNGLIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NLKARTE NR. 4871 78XX XXXX 0469KARTENZAHLUNGCOMDIRECT VISA-DEBITKARTE2026-08-27 00:00:00Ref. 2M2C29CV1IKW4XFE/95664';
+        $this->assertEquals(
+            'LIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NL',
+            TransactionsToFireflySender::extractCardMerchantName($description)
+        );
+
+        $this->assertNull(TransactionsToFireflySender::extractCardMerchantName('LASTSCHRIFT / BELASTUNGNETTO MARKEN-DISCOUNT'));
+        $this->assertNull(TransactionsToFireflySender::extractCardMerchantName(''));
+    }
+
+    public function test_transaction_processing_kartenverfuegung_without_counterparty()
+    {
+        $description = 'KARTENVERFÜGUNGLIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NLKARTE NR. 4871 78XX XXXX 0469KARTENZAHLUNGCOMDIRECT VISA-DEBITKARTE2026-08-27 00:00:00Ref. 2M2C29CV1IKW4XFE/95664';
+        $transaction = new Transaction;
+        $transaction->setCreditDebit(Transaction::CD_DEBIT);
+        $transaction->setValutaDate(new DateTime('2026-08-27'));
+        $transaction->setAmount(42.50);
+        $transaction->setName('');
+        $transaction->setStructuredDescription(array('SVWZ' => $description));
+
+        $expected = array(
+            'apply_rules' => true,
+            'error_if_duplicate_hash' => true,
+            'transactions' => array(
+                array(
+                    'type' => 'withdrawal',
+                    'date' => '2026-08-27',
+                    'amount' => 42.50,
+                    'description' => $description,
+                    'source_id' => $this->firefly_account_id,
+                    'destination_name' => 'LIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NL',
+                    'notes' => 'LIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NL',
+                )
+            )
+        );
+        $actual = TransactionsToFireflySender::transform_transaction_to_firefly_request_body(
+            $transaction,
+            $this->firefly_account_id, $this->firefly_accounts, "", ""
+        );
+
+        $this->assertEquals($expected, $actual);
+    }
+
+    public function test_transaction_processing_kartenverfuegung_with_regex()
+    {
+        $description = 'KARTENVERFÜGUNGLIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NLKARTE NR. 4871 78XX XXXX 0469KARTENZAHLUNGCOMDIRECT VISA-DEBITKARTE2026-08-27 00:00:00Ref. 2M2C29CV1IKW4XFE/95664';
+        $regex_match = '/^((?:KARTENVERFÜGUNG|ÜBERTRAG / ÜBERWEISUNG(?: - ECHTZEIT)?|LASTSCHRIFT / BELASTUNG))(.+?)((?:END-TO-END-REF|KARTE NR\\.).+?)(Ref\\. .+)?$/mi';
+        $regex_replace = '$2 [$1 | $3$4]';
+
+        $transaction = new Transaction;
+        $transaction->setCreditDebit(Transaction::CD_DEBIT);
+        $transaction->setValutaDate(new DateTime('2026-08-27'));
+        $transaction->setAmount(42.50);
+        $transaction->setName('');
+        $transaction->setStructuredDescription(array('SVWZ' => $description));
+
+        $expected = array(
+            'apply_rules' => true,
+            'error_if_duplicate_hash' => true,
+            'transactions' => array(
+                array(
+                    'type' => 'withdrawal',
+                    'date' => '2026-08-27',
+                    'amount' => 42.50,
+                    'description' => 'LIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NL [KARTENVERFÜGUNG | KARTE NR. 4871 78XX XXXX 0469KARTENZAHLUNGCOMDIRECT VISA-DEBITKARTE2026-08-27 00:00:00Ref. 2M2C29CV1IKW4XFE/95664]',
+                    'source_id' => $this->firefly_account_id,
+                    'destination_name' => 'LIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NL',
+                    'notes' => 'LIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NL',
+                )
+            )
+        );
+        $actual = TransactionsToFireflySender::transform_transaction_to_firefly_request_body(
+            $transaction,
+            $this->firefly_account_id, $this->firefly_accounts, $regex_match, $regex_replace
+        );
+
+        $this->assertEquals($expected, $actual);
+    }
+
+    public function test_transaction_processing_kartenverfuegung_keeps_existing_counterparty()
+    {
+        $transaction = new Transaction;
+        $transaction->setAccountNumber($this->valid_iban);
+        $transaction->setCreditDebit(Transaction::CD_DEBIT);
+        $transaction->setValutaDate(new DateTime('2020-06-01'));
+        $transaction->setAmount(3.14);
+        $transaction->setName('NETTO MARKEN-DISCOUNT');
+        $transaction->setStructuredDescription(array(
+            'SVWZ' => 'LASTSCHRIFT / BELASTUNGNETTO MARKEN-DISCOUNT, MEINERSEN  DEKARTE NR. 4871 78XX XXXX 0469KARTENZAHLUNGCOMDIRECT VISA-DEBITKARTE2026-08-28 00:00:00Ref. 9G2C29CV13A3INU6/4607',
+        ));
+
+        $actual = TransactionsToFireflySender::transform_transaction_to_firefly_request_body(
+            $transaction,
+            $this->firefly_account_id, $this->firefly_accounts, "", ""
+        );
+
+        $this->assertEquals('NETTO MARKEN-DISCOUNT', $actual['transactions'][0]['destination_name']);
+    }
+
 }
