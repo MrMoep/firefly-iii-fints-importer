@@ -318,7 +318,7 @@ final class TransactionsToFireflySenderTest extends TestCase
     public function test_transaction_processing_kartenverfuegung_with_regex()
     {
         $description = 'KARTENVERFÜGUNGLIEFERANDO.DE LIEFERSERVI, AMSTERDAM  NLKARTE NR. 4871 78XX XXXX 0469KARTENZAHLUNGCOMDIRECT VISA-DEBITKARTE2026-08-27 00:00:00Ref. 2M2C29CV1IKW4XFE/95664';
-        $regex_match = '/^((?:KARTENVERFÜGUNG|ÜBERTRAG / ÜBERWEISUNG(?: - ECHTZEIT)?|LASTSCHRIFT / BELASTUNG))(.+?)((?:END-TO-END-REF|KARTE NR\\.).+?)(Ref\\. .+)?$/mi';
+        $regex_match = '/^((?:KARTENVERFÜGUNG|ÜBERTRAG \/ ÜBERWEISUNG(?: - ECHTZEIT)?|LASTSCHRIFT \/ BELASTUNG))(.+?)((?:END-TO-END-REF|KARTE NR\\.).+?)(Ref\\. .+)?$/mi';
         $regex_replace = '$2 [$1 | $3$4]';
 
         $transaction = new Transaction;
